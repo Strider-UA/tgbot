@@ -17,7 +17,18 @@ chat_histories = {}
 # Последние сообщения в группах для анализа
 group_messages = {}
 
+@dp.message()
+async def ai_chat(message: types.Message):
+    if not message.text:
+        return
 
+    print(f"ТИП ЧАТА: {message.chat.type} | ТЕКСТ: {message.text}")
+
+    is_private = message.chat.type == "private"
+    bot_info = await bot.get_me()
+    is_mentioned = f"@{bot_info.username}" in message.text
+
+    print(f"IS_PRIVATE: {is_private} | IS_MENTIONED: {is_mentioned} | BOT: @{bot_info.username}")
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
