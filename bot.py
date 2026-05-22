@@ -110,7 +110,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-        chat_histories[user_id].append({
+        chat_histories[history_key].append({
             "role": "assistant",
             "content": answer
         })
