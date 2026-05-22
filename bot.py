@@ -16,12 +16,14 @@ group_messages = {}
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    chat_histories[message.from_user.id] = []
+    history_key = f"{message.from_user.id}_{message.chat.id}"
+    chat_histories[history_key] = []
     await message.answer("Привет! Задай мне любой вопрос 🤖")
 
 @dp.message(Command("reset"))
 async def reset(message: types.Message):
-    chat_histories[message.from_user.id] = []
+    history_key = f"{message.from_user.id}_{message.chat.id}"
+    chat_histories[history_key] = []
     await message.answer("История очищена! 🔄")
 
 @dp.message(Command("analyze"))
@@ -58,13 +60,9 @@ async def ai_chat(message: types.Message):
     if not message.text:
         return
 
-    print(f"ТИП ЧАТА: {message.chat.type} | ТЕКСТ: {message.text}")
-
     is_private = message.chat.type == "private"
     bot_info = await bot.get_me()
     is_mentioned = f"@{bot_info.username}" in message.text
-
-    print(f"IS_PRIVATE: {is_private} | IS_MENTIONED: {is_mentioned} | BOT: @{bot_info.username}")
 
     if not is_private:
         chat_id = message.chat.id
@@ -82,11 +80,12 @@ async def ai_chat(message: types.Message):
     else:
         user_text = message.text
 
-    user_id = message.from_user.id
-    if user_id not in chat_histories:
-        chat_histories[user_id] = []
+    # Уникальный ключ для каждого пользователя в каждом чате
+    history_key = f"{message.from_user.id}_{message.chat.id}"
+    if history_key not in chat_histories:
+        chat_histories[history_key] = []
 
-    chat_histories[user_id].append({
+    chat_histories[history_key].append({
         "role": "user",
         "content": user_text
     })
@@ -94,9 +93,23 @@ async def ai_chat(message: types.Message):
     try:
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=chat_histories[user_id]
+            messages=chat_histories[history_key]
         )
         answer = response.choices[0].message.content
+        chat_histories[history_key].append({
+            "role": "assistant",
+            "content": answer
+        })
+        await message.answer(answer)
+    except Exception as e:
+        print("ERROR:", e)
+        await message.answer(f"Ошибка: {e}")
+
+async def main():
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
         chat_histories[user_id].append({
             "role": "assistant",
             "content": answer
