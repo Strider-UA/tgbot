@@ -110,18 +110,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-        chat_histories[history_key].append({
-            "role": "assistant",
-            "content": answer
-        })
-        await message.answer(answer)
-    except Exception as e:
-        print("ERROR:", e)
-        await message.answer(f"Ошибка: {e}")
-
-async def main():
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-   
