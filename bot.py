@@ -17,6 +17,8 @@ chat_histories = {}
 # Последние сообщения в группах для анализа
 group_messages = {}
 
+
+
 @dp.message(Command("start"))
 async def start(message: types.Message):
     chat_histories[message.from_user.id] = []
@@ -87,8 +89,12 @@ async def ai_chat(message: types.Message):
         if not is_mentioned:
             return
 
-        # Убираем упоминание бота из текста
+       # Убираем упоминание бота из текста
         user_text = message.text.replace(f"@{bot_info.username}", "").strip()
+
+        if not user_text:
+            user_text = "Привет! Чем могу помочь?"
+
     else:
         user_text = message.text
 
