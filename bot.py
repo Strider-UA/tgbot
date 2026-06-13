@@ -4,7 +4,6 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from groq import Groq
 from telethon import TelegramClient
-from telethon.tl.types import PeerChannel
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
@@ -16,8 +15,6 @@ ADMIN_ID = os.environ.get("ADMIN_ID")
 client_groq = Groq(api_key=GROQ_API_KEY)
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
-
-# Telethon клиент
 tg_client = TelegramClient("session", API_ID, API_HASH)
 
 chat_histories = {}
@@ -27,7 +24,13 @@ group_messages = {}
 async def start(message: types.Message):
     history_key = f"{message.from_user.id}_{message.chat.id}"
     chat_histories[history_key] = []
-    await message.answer("Привет! Задай мне любой вопрос 🤖")
+    await message.answer(
+        "Привет! 🤖\n\n"
+        "Команды:\n"
+        "/analyze — анализ переписки\n"
+        "/ask [вопрос] — задай вопрос по переписке\n"
+        "/reset — очистить историю"
+    )
 
 @dp.message(Command("reset"))
 async def reset(message: types.Message):
@@ -40,22 +43,16 @@ async def analyze(message: types.Message):
     if message.chat.type == "private":
         await message.answer("Эта команда работает только в группах!")
         return
-
     await message.answer("⏳ Читаю историю чата, подожди...")
-
     try:
-        # Читаем историю через Telethon
         messages = []
         async with tg_client:
-            async for msg in tg_client.iter_messages(message.chat.id, limit=200):
+            async for msg in tg_client.iter_messages(message.chat.id, limit=1000):
                 if msg.text:
                     sender = getattr(msg.sender, "first_name", "Аноним") or "Аноним"
                     messages.append(f"{sender}: {msg.text}")
-
-        messages.reverse()  # от старых к новым
+        messages.reverse()
         conversation = "\n".join(messages)
-
-        # Отправляем в ИИ
         response = client_groq.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -65,20 +62,66 @@ async def analyze(message: types.Message):
                 },
                 {
                     "role": "user",
-                    "content": f"Вот последние сообщения из группы '{message.chat.title}':\n\n{conversation}\n\nПроанализируй."
+                    "content": f"Вот переписка из группы '{message.chat.title}':\n\n{conversation}\n\nПроанализируй."
                 }
             ]
         )
         analysis = response.choices[0].message.content
-
-        # Отправляем результат
         await message.answer(f"📊 Анализ:\n\n{analysis}")
-
-        # Отправляем в личку администратору если задан ADMIN_ID
         if ADMIN_ID:
             await bot.send_message(
                 chat_id=int(ADMIN_ID),
                 text=f"📊 Анализ группы *{message.chat.title}*:\n\n{analysis}",
+                parse_mode="Markdown"
+            )
+    except Exception as e:
+        print("ERROR:", e)
+        await message.answer(f"Ошибка: {e}")
+
+@dp.message(Command("ask"))
+async def ask(message: types.Message):
+    if message.chat.type == "private":
+        await message.answer("Эта команда работает только в группах!")
+        return
+
+    # Получаем вопрос после команды /ask
+    question = message.text.replace("/ask", "").strip()
+    if not question:
+        await message.answer("Укажи вопрос! Например:\n/ask найди все суммы с буквой р\n/ask кто кому должен деньги")
+        return
+
+    await message.answer("⏳ Читаю историю чата, подожди...")
+
+    try:
+        messages = []
+        async with tg_client:
+            async for msg in tg_client.iter_messages(message.chat.id, limit=1000):
+                if msg.text:
+                    sender = getattr(msg.sender, "first_name", "Аноним") or "Аноним"
+                    messages.append(f"{sender}: {msg.text}")
+        messages.reverse()
+        conversation = "\n".join(messages)
+
+        response = client_groq.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Ты помощник который анализирует переписку в групповом чате и отвечает на вопросы по ней. Отвечай точно и конкретно на вопрос пользователя."
+                },
+                {
+                    "role": "user",
+                    "content": f"Вот переписка из группы '{message.chat.title}':\n\n{conversation}\n\nВопрос: {question}"
+                }
+            ]
+        )
+        answer = response.choices[0].message.content
+        await message.answer(f"💬 Ответ:\n\n{answer}")
+
+        if ADMIN_ID:
+            await bot.send_message(
+                chat_id=int(ADMIN_ID),
+                text=f"❓ Вопрос по группе *{message.chat.title}*:\n{question}\n\n💬 Ответ:\n{answer}",
                 parse_mode="Markdown"
             )
 
@@ -136,9 +179,7 @@ async def ai_chat(message: types.Message):
         await message.answer(f"Ошибка: {e}")
 
 async def main():
-    # Запускаем Telethon авторизацию
     await tg_client.start(phone=PHONE)
-    # Запускаем бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
