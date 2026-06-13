@@ -148,9 +148,42 @@ async def ai_chat(message: types.Message):
             group_messages[chat_id].pop(0)
         if not is_mentioned:
             return
+
         user_text = message.text.replace(f"@{bot_info.username}", "").strip()
         if not user_text:
             user_text = "Привет! Чем могу помочь?"
+
+        # Читаем историю чата через Telethon
+        await message.answer("⏳ Читаю историю чата, подожди...")
+        try:
+            messages = []
+            async with tg_client:
+                async for msg in tg_client.iter_messages(message.chat.id, limit=1000):
+                    if msg.text:
+                        sender_name = getattr(msg.sender, "first_name", "Аноним") or "Аноним"
+                        messages.append(f"{sender_name}: {msg.text}")
+            messages.reverse()
+            conversation = "\n".join(messages)
+
+            response = client_groq.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Ты помощник который анализирует переписку в групповом чате и отвечает на вопросы по ней. Отвечай точно и конкретно."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Вот переписка из группы '{message.chat.title}':\n\n{conversation}\n\nВопрос: {user_text}"
+                    }
+                ]
+            )
+            answer = response.choices[0].message.content
+            await message.answer(f"💬 {answer}")
+            return
+        except Exception as e:
+            await message.answer(f"Ошибка: {e}")
+            return
     else:
         user_text = message.text
 
